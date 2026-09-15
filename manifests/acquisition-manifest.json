@@ -1,0 +1,12 @@
+[
+  {
+    "acquisition_id": "ACQ-2026-09-14T17-06-34-356Z",
+    "timestamp": "2026-09-14T17:06:34.685Z",
+    "record_count": 2,
+    "method": "PLAYWRIGHT_SCRAPING",
+    "topic": "Infraestructura",
+    "status": "SUCCESS",
+    "artifact_file": "data/00_raw/radicados_ACQ-2026-09-14T17-06-34-356Z.json",
+    "sha256_hash": "6fc655acd9870e428e4a227c1098716c452b984a571b2d6244f7f7fbfee7a674"
+  }
+]
