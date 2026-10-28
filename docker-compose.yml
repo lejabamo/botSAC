@@ -1,35 +1,55 @@
 version: '3.8'
 
 services:
+  # ============================================================================
+  # BACKEND API: FastAPI Enterprise
+  # ============================================================================
   backend:
-    build: 
-      context: ./backend
+    build:
+      context: .
+      dockerfile: Dockerfile
     container_name: botsac-backend
+    restart: always
     ports:
       - "8000:8000"
-    environment:
-      - ORACLE_USER=${ORACLE_USER:-botsac_user}
-      - ORACLE_PASS=${ORACLE_PASS:-botsac_password}
-      - ORACLE_DSN=${ORACLE_DSN:-db_host:1521/XEPDB1}
-    # Si quisieras montar un volumen para logs:
-    # volumes:
-    #   - ./backend/logs:/app/logs
+    env_file:
+      - .env
+    volumes:
+      - ./data:/app/data
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://localhost:8000/api/inbox"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+      start_period: 20s
 
+  # ============================================================================
+  # FRONTEND: React SPA servida con Nginx (Proxy inverso hacia backend)
+  # ============================================================================
   frontend:
     build:
       context: ./frontend
+      dockerfile: Dockerfile
     container_name: botsac-frontend
+    restart: always
     ports:
       - "80:80"
     depends_on:
       - backend
-    # En desarrollo, Vite requiere que la API esté mapeada. 
-    # Asegúrate que las llamadas del front apunten al dominio de producción del backend.
 
-# Si en el futuro deseas incluir la BD de Oracle Express en Docker para desarrollo:
-#   db:
-#     image: container-registry.oracle.com/database/express:21.3.0-xe
-#     ports:
-#       - "1521:1521"
-#     environment:
-#       - ORACLE_PWD=botsac_password
+  # ============================================================================
+  # AGENTE BACKGROUND WORKER: Daemon de ingesta continua y watchdog
+  # ============================================================================
+  worker:
+    build:
+      context: .
+      dockerfile: Dockerfile
+    container_name: botsac-worker
+    restart: always
+    env_file:
+      - .env
+    volumes:
+      - ./data:/app/data
+    command: ["python", "-c", "import time, subprocess, sys; print('[DAEMON] Iniciando BotSAC Worker Daemon...'); [time.sleep(300) or subprocess.run([sys.executable, 'backend/watchdog_service.py']) for _ in iter(int, 1)]"]
+    depends_on:
+      - backend
