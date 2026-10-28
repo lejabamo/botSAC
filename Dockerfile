@@ -3,10 +3,11 @@ FROM python:3.11-slim
 WORKDIR /app
 
 # Instalar dependencias del sistema requeridas para Oracle Client y utilidades
+# Compatible con Debian 12 (libaio1) y Debian 13 Trixie / Ubuntu 24.04 (libaio1t64)
 RUN apt-get update && apt-get install -y --no-install-recommends \
     build-essential \
     curl \
-    libaio1 \
+    && (apt-get install -y --no-install-recommends libaio1 2>/dev/null || apt-get install -y --no-install-recommends libaio1t64 2>/dev/null || true) \
     && rm -rf /var/lib/apt/lists/*
 
 # Copiar e instalar dependencias de Python
