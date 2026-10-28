@@ -1,5 +1,5 @@
 from pydantic import BaseModel
-from typing import List
+from typing import List, Optional, Dict, Any
 
 class DocumentSummary(BaseModel):
     filename: str
@@ -65,3 +65,8 @@ class BotSACReview(BaseModel):
     key_dates: List[str]
     alerts: List[ReviewAlert]
     trace: List[ReviewTrace]
+    category: Optional[str] = None
+    instituciones_sedes: Optional[List[Dict[str, Any]]] = None
+    etapa_tramite: Optional[str] = None
+    etapa_label: Optional[str] = None
+

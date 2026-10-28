@@ -1,0 +1,35 @@
+version: '3.8'
+
+services:
+  backend:
+    build: 
+      context: ./backend
+    container_name: botsac-backend
+    ports:
+      - "8000:8000"
+    environment:
+      - ORACLE_USER=${ORACLE_USER:-botsac_user}
+      - ORACLE_PASS=${ORACLE_PASS:-botsac_password}
+      - ORACLE_DSN=${ORACLE_DSN:-db_host:1521/XEPDB1}
+    # Si quisieras montar un volumen para logs:
+    # volumes:
+    #   - ./backend/logs:/app/logs
+
+  frontend:
+    build:
+      context: ./frontend
+    container_name: botsac-frontend
+    ports:
+      - "80:80"
+    depends_on:
+      - backend
+    # En desarrollo, Vite requiere que la API esté mapeada. 
+    # Asegúrate que las llamadas del front apunten al dominio de producción del backend.
+
+# Si en el futuro deseas incluir la BD de Oracle Express en Docker para desarrollo:
+#   db:
+#     image: container-registry.oracle.com/database/express:21.3.0-xe
+#     ports:
+#       - "1521:1521"
+#     environment:
+#       - ORACLE_PWD=botsac_password

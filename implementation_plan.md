@@ -1,89 +1,41 @@
-# Objetivo: BOTSAC / FUNDACIÓN SEGURA + PRIMER VERTICAL SLICE REAL
+# Plan de Implementación: Validación Funcional del MVP (Prompt 30)
 
-Este plan reemplaza las iteraciones anteriores en Node.js y establece la nueva base tecnológica en **Python 3.12+**, utilizando **Playwright**, **pytest**, y **Streamlit**. Se seguirá una metodología estricta de validación paso a paso para asegurar la integridad, seguridad (solo lectura) y trazabilidad, tal como fue requerido.
+Este plan aborda la recolección íntegra de los 20 radicados, la deduplicación, la validación de UTF-8 y las pruebas de caché de adquisición profunda.
 
-## User Review Required
+## 1. Auditoría de la Bandeja y Regla de los 20
+El problema de obtener solo 11 radicados en el paso anterior se debió a que el script de automatización (`test_29`) perdía la referencia al marco de "ASIGNADOS POR FUNCIONARIOS" después de extraer los datos del primer funcionario (Andrea Vanessa). 
+**Cambios propuestos:**
+- Crear `tests/test_30_mvp_flow.py`.
+- **Ruta estable:** Al iterar sobre los funcionarios, en lugar de usar referencias de marcos oxidadas, el script buscará *dinámicamente* el frame de `ASIGNADOS POR DEPENDENCIAS` y hará clic en "Infraestructura Educativa" en cada iteración para forzar la recarga limpia de la lista de funcionarios antes de hacer clic en el siguiente.
+- Se recolectarán *todos* los radicados "SIN FINALIZAR" de todos los funcionarios.
+- **Tabla de Diagnóstico:** Se imprimirá en consola un reporte detallado: `FUNCIONARIO | USUARIO | SIN FINALIZAR EN SAC | OBTENIDOS POR BOTSAC`.
+- **Regla de los 20:** Una vez extraídos todos los radicados de la dependencia, se unificarán en una sola lista, se **deduplicarán** basándose estrictamente en la clave `"radicado"`, se ordenarán por fecha de creación descendente (si está disponible y parseable) y se recortarán a exactamente los últimos 20 pendientes. Se sobrescribirá `data/dashboard_inbox.json`.
 
-> [!IMPORTANT]
-> Se eliminarán los archivos y directorios de la prueba anterior en Node.js (`package.json`, `package-lock.json`, `node_modules`, `src/`, y archivos JS en `scripts/`) ya que entraremos de lleno en la arquitectura de Python.
-> 
-> Confirmaré la existencia del archivo `.env` local para asegurar que las credenciales no sean expuestas ni manipuladas.
+## 2. Validación de Adquisición (CAU2026ER032558)
+Dentro de `test_30_mvp_flow.py`, se incluirá un bloque para probar programáticamente el módulo de adquisición (`scripts/acquire_radicado.py`):
+- Se ejecutará el script apuntando a `CAU2026ER032558`.
+- Se afirmará (assert) que el documento PDF existe, que `manifest.json` guarda el `SHA-256`, y que `botsac_review.json` fue creado localmente.
+- Se verificará que ninguna inferencia de Qwen fue invocada en el proceso (Zero-LLM).
+
+## 3. Validación de Caché
+El test verificará el comportamiento local:
+- Se instanciará la lógica de `app/dashboard.py` (usando `load_radicado_data`) para `CAU2026ER032558` y `CAU2026ER032723`.
+- Se comprobará que ambos devuelven información válida al instante, sin lanzar adquisiciones repetidas.
+- Se confirmará que `CAU2026ER032723` preserva los resúmenes y análisis originales realizados en pasos previos (su metadata generada por LLM sigue viva).
+
+## 4. Validación UTF-8
+Se incluirán aserciones explícitas (`assert`) para verificar la existencia de palabras acentuadas correctamente en el JSON resultante:
+- "Gobernación"
+- "Educación"
+Sin el uso de `replace()` manual, asegurando que la recodificación `latin1 -> utf-8` en la capa de Scraping es robusta.
 
 ## Open Questions
 
-Ninguna por el momento. Avanzaremos ejecutando y validando los tests enumerados.
-
-## Proposed Changes
-
-### 1. Limpieza del Entorno Anterior
-- **[DELETE]** `package.json`
-- **[DELETE]** `package-lock.json`
-- **[DELETE]** `node_modules/`
-- **[DELETE]** `src/` (y su contenido Node)
-- **[DELETE]** scripts de Node antiguos.
-
-### 2. Creación del Entorno Virtual y Dependencias
-- Creación de entorno `.venv` utilizando Python 3.12+.
-- Instalación de dependencias base: `playwright`, `pytest`, `pytest-playwright`, `python-dotenv`, `streamlit`.
-- Generación de `requirements.txt`.
-- Instalación de navegadores Playwright (`playwright install chromium`).
-
-### 3. Estructura del Monolito Modular
-Se creará la siguiente estructura de directorios en `C:\Users\jefes\OneDrive\Desktop\botSAC`:
-```text
-botSAC/
-├── app/
-│   └── dashboard.py
-├── botsac/
-│   ├── config/
-│   ├── security/
-│   ├── logging/
-│   ├── sac/
-│   │   ├── client/
-│   │   ├── auth/
-│   │   ├── navigation/
-│   │   ├── radicados/
-│   │   └── documents/
-│   ├── ingestion/
-│   ├── storage/
-│   ├── analysis/
-│   └── models/
-├── scripts/
-│   └── acquire.py
-├── data/
-│   ├── raw/
-│   ├── documents/
-│   ├── ingested/
-│   ├── analysis/
-│   ├── manifests/
-│   ├── state/
-│   └── logs/
-├── tests/
-├── .gitignore
-├── requirements.txt
-└── README.md
-```
-
-### 4. Implementación y Pruebas Paso a Paso
-El desarrollo se guiará estrictamente por la secuencia de los 19 Tests indicados en el prompt. No se avanzará a un test sin haber asegurado el anterior.
-
-* **TEST 0 & 1:** Python + virtualenv funcionando y Playwright funcional.
-* **TEST 2 & 3:** Apertura del portal SAC y selección de "SE CAUCA".
-* **TEST 4 & 5:** Login real y verificación del panel autenticado (Action Guard Activo: Solo lectura).
-* **TEST 6 a 10:** Navegación por dependencias (Mis Sub-Dependencias -> Infraestructura Educativa -> Funcionarios -> Vencidos).
-* **TEST 11 a 13:** Apertura del primer radicado, extracción de metadata y contenido de solicitud.
-* **TEST 14 a 16:** Identificación y descarga de documentos reales, y cálculo de SHA-256.
-* **TEST 17 a 19:** Persistencia (expediente y `manifest.json`) y verificación de integridad de solo lectura.
-
-### 5. Interfaz Streamlit
-Desarrollo de `app/dashboard.py` (Streamlit) en modo de solo lectura (consumiendo archivos locales) para visualizar el expediente descargado (Acquisition ID, Radicado, Metadata, Documentos).
+> [!NOTE]
+> **Ordenamiento por Fecha:** En Scriptcase, el formato de fecha suele ser `DD/MM/YYYY`. El script parseará estas fechas a objetos `datetime` para realizar un ordenamiento descendente matemático antes de recortar a 20. ¿Deseas que los casos sin fecha (o con fecha errónea) se prioricen al principio o al final de la lista de 20? (Por defecto, los enviaré al final).
 
 ## Verification Plan
-
-### Automated Tests
-- Se utilizará `pytest` para verificar los **TEST 0 a 19** secuencialmente. 
-- Cada prueba dejará un registro (`[ACTION_BLOCKED]`, `[LOGIN]`, `[NAVIGATION]`, etc.) según las reglas establecidas.
-
-### Manual Verification
-- Comprobaremos mediante la interfaz de Streamlit local que los datos extraídos (metadata y documentos) corresponden al portal sin haber modificado la fuente original (Regla de Solo Lectura).
-- Verificaremos el `manifest.json` y los reportes de logging para confirmar que no se realizó ninguna acción mutativa (Security Guard).
+1. Ejecutar `pytest tests/test_30_mvp_flow.py -s`.
+2. Analizar la salida en consola (la tabla de diagnóstico).
+3. Verificar que `data/dashboard_inbox.json` contiene exactamente 20 elementos (o el máximo disponible si es menor a 20), sin duplicados, y con UTF-8 correcto.
+4. Generar el reporte final en el `walkthrough.md` documentando el motivo real de la limitación anterior y detallando el éxito de la nueva extracción.

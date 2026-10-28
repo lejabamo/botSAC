@@ -1,21 +1,96 @@
+# ==============================================================================
+# SEGURIDAD Y CREDENCIALES
+# ==============================================================================
 .env
 .env.*
 !.env.example
 
+# ==============================================================================
+# ENTORNOS VIRTUALES Y CACHÉ PYTHON
+# ==============================================================================
 .venv/
+venv/
+ENV/
 __pycache__/
+*.py[cod]
+*$py.class
 .pytest_cache/
+.coverage
+htmlcov/
+*.egg-info/
+.mypy_cache/
 
-data/raw/
-data/documents/
-data/state/
-data/logs/
-data/ingested/
-data/analysis/
-data/manifests/
+# ==============================================================================
+# BINARIOS Y LIBRERÍAS DE ORACLE
+# ==============================================================================
+instantclient/
+cloudflared.exe
+*.exe
+*.dll
+*.so
+*.dylib
+*.rar
+*.zip
+*.tar.gz
+*.7z
+db_oracle.rar
+db_oracle/
+
+# ==============================================================================
+# SCRATCH Y ARTEFACTOS TEMPORALES DE EXPLORACIÓN
+# ==============================================================================
+scratch/
+scratch_test.py
+scratch_test_flow.py
+backups/
+tmp/
+temp/
+debug.html
+login_content.html
+elements.txt
+inputs.txt
+dump.txt
+secretarias_inputs.json
+*.log
+
+# ==============================================================================
+# IMÁGENES Y CAPTURAS DE PRUEBA LOCALES
+# ==============================================================================
+*.png
+*.jpg
+*.jpeg
+*.webp
+*.gif
+!frontend/src/assets/**
+!frontend/public/**
+
+# ==============================================================================
+# ALMACENAMIENTO DE DATOS Y DOCUMENTOS DESCARGADOS
+# ==============================================================================
 data/
-
 *.pdf
 *.docx
 *.xlsx
-*.zip
+
+# ==============================================================================
+# FRONTEND / NODE.JS
+# ==============================================================================
+node_modules/
+dist/
+frontend/node_modules/
+frontend/dist/
+frontend/dist-ssr/
+npm-debug.log*
+yarn-debug.log*
+yarn-error.log*
+.pnpm-debug.log*
+
+# ==============================================================================
+# EDITORES Y SISTEMA
+# ==============================================================================
+.vscode/*
+!.vscode/extensions.json
+.idea/
+.DS_Store
+Thumbs.db
+
