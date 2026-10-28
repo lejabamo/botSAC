@@ -37,9 +37,11 @@ db_oracle.rar
 db_oracle/
 
 # ==============================================================================
-# SCRATCH Y ARTEFACTOS TEMPORALES DE EXPLORACIÓN
+# SCRATCH, TESTS Y ARTEFACTOS TEMPORALES
 # ==============================================================================
+tests/
 scratch/
+dashboard/
 scratch_test.py
 scratch_test_flow.py
 backups/

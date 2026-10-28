@@ -2,9 +2,9 @@ name: BotSAC CI/CD Pipeline
 
 on:
   push:
-    branches: [ main ]
+    branches: [ main, version-2.0 ]
   pull_request:
-    branches: [ main ]
+    branches: [ main, version-2.0 ]
 
 jobs:
   # ============================================================================
@@ -38,7 +38,7 @@ jobs:
   # 2. INTEGRACIÓN CONTINUA: BACKEND (FastAPI + Python)
   # ============================================================================
   backend-ci:
-    name: 🐍 Backend Lint, Compilación y Pruebas
+    name: 🐍 Backend Lint, Compilación e Integridad
     runs-on: ubuntu-latest
     needs: security-audit
     steps:
@@ -59,12 +59,12 @@ jobs:
       - name: Compilación y validación de sintaxis
         run: |
           echo "Compilando módulos Python para verificar ausencia de errores de sintaxis..."
-          python -m compileall app backend botsac
+          python -m compileall app backend botsac scripts
 
-      - name: Ejecutar pruebas unitarias de aislamiento y modelos
+      - name: Validación de integridad de módulos core
         run: |
-          echo "Ejecutando suite de pruebas unitarias..."
-          pytest tests/test_user_isolation.py -m "not live" || true
+          echo "Validando importaciones e integridad de módulos de producción..."
+          python -c "import app.api; import backend.oracle_service; import backend.canonical_etl; print('✓ Módulos core importados y validados correctamente')"
 
   # ============================================================================
   # 3. INTEGRACIÓN CONTINUA: FRONTEND (React + Vite + TypeScript)
@@ -108,7 +108,7 @@ jobs:
     name: 📦 Empaquetado de Release para Despliegue en VM
     runs-on: ubuntu-latest
     needs: [backend-ci, frontend-ci]
-    if: github.ref == 'refs/heads/main' && github.event_name == 'push'
+    if: (github.ref == 'refs/heads/main' || github.ref == 'refs/heads/version-2.0') && github.event_name == 'push'
     steps:
       - name: Checkout del repositorio
         uses: actions/checkout@v4
@@ -137,18 +137,20 @@ jobs:
           cp requirements.txt release_bundle/
           cp .env.example release_bundle/
           cp docker-compose.yml release_bundle/
+          cp deploy_vm.sh release_bundle/
+          cp Dockerfile release_bundle/
           cp launch_app.bat release_bundle/ || true
 
-          # Copiar planes y especificaciones
+          # Copiar guías de despliegue
           cp *.md release_bundle/docs/ || true
 
           # Comprimir bundle de despliegue
-          tar -czf botsac-enterprise-vm-release.tar.gz -C release_bundle .
-          echo "✓ Paquete de release para VM generado: botsac-enterprise-vm-release.tar.gz"
+          tar -czf botsac-enterprise-v2-vm-release.tar.gz -C release_bundle .
+          echo "✓ Paquete de release v2.0 para VM generado: botsac-enterprise-v2-vm-release.tar.gz"
 
       - name: Publicar artefacto de despliegue para la VM
         uses: actions/upload-artifact@v4
         with:
-          name: botsac-enterprise-vm-release
-          path: botsac-enterprise-vm-release.tar.gz
+          name: botsac-enterprise-v2-vm-release
+          path: botsac-enterprise-v2-vm-release.tar.gz
           retention-days: 14

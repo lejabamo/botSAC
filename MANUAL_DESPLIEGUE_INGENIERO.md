@@ -1,4 +1,4 @@
-# MANUAL DE INSTALACIÓN Y DESPLIEGUE EN PRODUCCIÓN
+# MANUAL DE INSTALACIÓN Y DESPLIEGUE EN PRODUCCIÓN (v2.0)
 ## Sistema BotSAC Enterprise — Gobernación del Cauca
 ### Guía Técnica Especializada para Infraestructura:
 * **Servidor Central de Base de Datos:** **Oracle Linux (UEK / Red Hat Family)**
@@ -8,9 +8,9 @@
 
 ## 1. RESUMEN EJECUTIVO Y ARQUITECTURA DE INFRAESTRUCTURA
 
-El sistema **BotSAC** opera bajo una arquitectura distribuida, autónoma y autocontenida:
+El sistema **BotSAC v2.0** opera bajo una arquitectura distribuida, autónoma y autocontenida:
 1. **Servidor Principal (Oracle Linux):** Aloja el motor de base de datos institucional Oracle 19c/21c con la PDB `pdb_dev.educauca.gov.co` en la IP `172.16.0.10:1521`.
-2. **Máquina Virtual de Aplicación (Debian 13 Trixie):** Aloja los **4 contenedores Docker** del stack completo (Web Frontend Nginx, Backend API FastAPI, Worker Agente Continuo y **Motor de Inferencia de Inteligencia Artificial Ollama**).
+2. **Máquina Virtual de Aplicación (Debian 13 Trixie):** Aloja los **4 microservicios Dockerizados** del stack completo (Web Frontend Nginx, Backend API FastAPI, Worker Agente Continuo y **Motor de Inferencia de Inteligencia Artificial Ollama**).
 
 ### Diagrama de Contenedores en la Máquina Virtual Debian 13:
 ```
@@ -49,14 +49,14 @@ El sistema **BotSAC** opera bajo una arquitectura distribuida, autónoma y autoc
                         └──────────────────────────────────────┘
 ```
 
-> **IMPORTANTE — AUTONOMÍA DEL SERVIDOR:**
-> El motor de Inteligencia Artificial (LLM) **NO se ejecuta en máquinas locales de desarrollo ni depende de la estación de trabajo**. Corre como un microservicio interno dockerizado (`botsac-ollama`) dentro de la propia Máquina Virtual en el servidor Debian 13. El backend y el worker se comunican con él a través de la red privada interna de Docker en `http://ollama:11434`.
+> **POLÍTICA DE SEGURIDAD ESTRICTA (DEVSECOPS):**
+> Siguiendo los lineamientos de seguridad de la información, el repositorio público/privado **NO contiene contraseñas en texto claro**. Las credenciales reales deben ser suministradas de forma privada al ingeniero de infraestructura para su configuración exclusiva en el archivo `/opt/botSAC/.env` de la máquina virtual.
 
 ---
 
-## 2. PARÁMETROS Y DATOS DE CONFIGURACIÓN OFICIALES
+## 2. PARÁMETROS Y ESTRUCTURA DE CONFIGURACIÓN
 
-Estos son los valores oficiales e inviolables que deben configurarse en el archivo `/opt/botSAC/.env` de la VM Debian 13:
+Estos son los parámetros requeridos para el archivo `/opt/botSAC/.env` en la VM Debian 13:
 
 ### 2.1 Conexión a Base de Datos Oracle Institucional (Servidor Oracle Linux)
 * **IP Servidor Oracle Linux:** `172.16.0.10`
@@ -64,21 +64,21 @@ Estos son los valores oficiales e inviolables que deben configurarse en el archi
 * **Nombre de Servicio / PDB:** `pdb_dev.educauca.gov.co`
 * **DSN Completo:** `172.16.0.10:1521/pdb_dev.educauca.gov.co`
 * **Usuario (Schema):** `BOTSAC`
-* **Contraseña:** `SedCauca**`
+* **Contraseña:** `<ORACLE_PASSWORD_SED_CAUCA>` *(Suministrada por el DBA institucional)*
 
 ### 2.2 Conexión a Plataforma SAC v2 (Gobernación del Cauca)
 * **URL Login Oficial:** `https://sac2.gestionsecretariasdeeducacion.gov.co/app_Login/`
 * **Usuario SAC Base:** `djdelgado`
-* **Contraseña SAC Base:** `Bucheli_123`
+* **Contraseña SAC Base:** `<SAC_PASSWORD_INSTITUCIONAL>`
 
 ### 2.3 Cuentas Iniciales para Validación de Aislamiento y Aprobación
 1. **Líder de Oficina:**
    * **Usuario:** `ljbastidas` (Leonardo Javier Bastidas Moreno)
-   * **Contraseña:** `SuperS4c`
+   * **Contraseña:** `<PASSWORD_LJBASTIDAS>`
    * **Rol:** Inbox Zero, visualización de documentos analizados, aprobación y archivo a `📁 Tramitados`.
 2. **Subdependencia Infraestructura Educativa:**
    * **Usuario:** `djdelgado`
-   * **Contraseña:** `Bucheli_123`
+   * **Contraseña:** `<PASSWORD_DJDELGADO>`
    * **Rol:** Gestión de solicitudes asignadas.
 
 ### 2.4 Motor de Inteligencia Artificial (LLM Dockerizado en el Servidor)
@@ -155,10 +155,10 @@ docker compose version
 
 ---
 
-### PASO 3: Clonar el Repositorio de Producción Sanitizado
+### PASO 3: Clonar el Repositorio de Producción (Rama `version-2.0`)
 ```bash
 cd /opt
-sudo git clone https://github.com/lejabamo/botSAC.git
+sudo git clone -b version-2.0 https://github.com/lejabamo/botSAC.git
 sudo chown -R $USER:$USER /opt/botSAC
 cd /opt/botSAC
 ```
@@ -166,22 +166,26 @@ cd /opt/botSAC
 ---
 
 ### PASO 4: Configurar el Archivo `.env` de Producción
-Cree el archivo de configuración con los datos oficiales:
+Cree el archivo de configuración con la plantilla segura:
 ```bash
-cat << 'EOF' > /opt/botSAC/.env
+cp .env.example .env
+nano .env
+```
+Ajuste las contraseñas suministradas por el equipo de seguridad:
+```ini
 # ==============================================================================
-# CONFIGURACIÓN DE PRODUCCIÓN - BOTSAC ENTERPRISE
+# CONFIGURACIÓN DE PRODUCCIÓN - BOTSAC ENTERPRISE v2.0
 # Servidor Central: Oracle Linux (172.16.0.10:1521)
 # Servidor de Aplicación: Debian 13 (Trixie)
 # ==============================================================================
 
 # Credenciales SAC v2 Oficial
 SAC_USER=djdelgado
-SAC_PASS=Bucheli_123
+SAC_PASS=<SAC_PASSWORD_INSTITUCIONAL>
 SAC_URL=https://sac2.gestionsecretariasdeeducacion.gov.co/app_Login/
 
 # Credenciales de Usuarios BotSAC
-BOTSAC_PASS_LJBASTIDAS=SuperS4c
+BOTSAC_PASS_LJBASTIDAS=<PASSWORD_LJBASTIDAS>
 
 # Motor LLM (Dockerizado con Ollama en el Servidor Debian 13)
 LLM_PROVIDER=ollama
@@ -190,12 +194,11 @@ LLM_MODEL=qwen2.5:3b
 
 # Base de Datos Oracle Institucional (Oracle Linux)
 ORACLE_USER=BOTSAC
-ORACLE_PASS=SedCauca**
+ORACLE_PASS=<ORACLE_PASSWORD_SED_CAUCA>
 ORACLE_HOST=172.16.0.10
 ORACLE_PORT=1521
 ORACLE_SERVICE=pdb_dev.educauca.gov.co
 ORACLE_DSN=172.16.0.10:1521/pdb_dev.educauca.gov.co
-EOF
 ```
 
 Asegurar permisos estrictos en Debian 13:
@@ -294,11 +297,11 @@ http://<IP_DEBIAN_13>/
 ```
 
 ### Casos de Validación:
-1. **Usuario `ljbastidas` / `SuperS4c`:**
+1. **Usuario Líder de Oficina (`ljbastidas`):**
    - Visualiza en primer lugar los radicados procesados con IA en estado `✓ LISTO`.
    - Botón `Aprobar y Archivar` habilitado únicamente para radicados listos.
    - Pestaña `📁 Tramitados`: Histórico de radicados despachados.
-2. **Usuario `djdelgado` / `Bucheli_123`:**
+2. **Usuario Subdependencia (`djdelgado`):**
    - Visualiza únicamente sus radicados asignados (aislamiento multi-tenant estricto).
 
 ---
@@ -313,7 +316,7 @@ docker compose exec ollama ollama pull qwen2.5:7b
 ### Actualizar la Aplicación desde GitHub
 ```bash
 cd /opt/botSAC
-git pull origin main
+git pull origin version-2.0
 docker compose up -d --build
 ```
 
@@ -336,7 +339,7 @@ docker compose logs -f --tail=50 worker
 | `Connection refused: http://ollama:11434` | El contenedor de Ollama no ha terminado de arrancar. | Verificar con `docker compose ps` y `docker compose logs ollama`. |
 | El modelo `qwen2.5:3b` no responde | No se completó la descarga del modelo. | Ejecutar: `docker compose exec ollama ollama pull qwen2.5:3b`. |
 | Error `libaio1t64` al construir backend | Transición 64-bit time_t en Debian 13. | Resuelto en Dockerfile (`apt-get install libaio1 || apt-get install libaio1t64`). |
-| `ORA-01017: invalid username/password` | Credenciales discrepantes en `.env`. | Verificar `ORACLE_USER=BOTSAC` y `ORACLE_PASS=SedCauca**` en `/opt/botSAC/.env`. |
+| `ORA-01017: invalid username/password` | Credenciales discrepantes en `.env`. | Verificar `ORACLE_USER` y `ORACLE_PASS` en `/opt/botSAC/.env`. |
 
 ---
-*Documento de Ingeniería — Gobernación del Cauca | BotSAC Enterprise.*
+*Documento de Ingeniería — Gobernación del Cauca | BotSAC Enterprise v2.0.*
