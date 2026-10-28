@@ -2,6 +2,24 @@ version: '3.8'
 
 services:
   # ============================================================================
+  # MOTOR LLM: Inferencia de Inteligencia Artificial Local (Ollama)
+  # ============================================================================
+  ollama:
+    image: ollama/ollama:latest
+    container_name: botsac-ollama
+    restart: always
+    ports:
+      - "11434:11434"
+    volumes:
+      - ollama_models:/root/.ollama
+    healthcheck:
+      test: ["CMD-SHELL", "ollama list > /dev/null 2>&1 || exit 1"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+      start_period: 20s
+
+  # ============================================================================
   # BACKEND API: FastAPI Enterprise
   # ============================================================================
   backend:
@@ -14,8 +32,12 @@ services:
       - "8000:8000"
     env_file:
       - .env
+    environment:
+      - LLM_BASE_URL=http://ollama:11434
     volumes:
       - ./data:/app/data
+    depends_on:
+      - ollama
     healthcheck:
       test: ["CMD", "curl", "-f", "http://localhost:8000/api/inbox"]
       interval: 30s
@@ -48,8 +70,15 @@ services:
     restart: always
     env_file:
       - .env
+    environment:
+      - LLM_BASE_URL=http://ollama:11434
     volumes:
       - ./data:/app/data
     command: ["python", "-c", "import time, subprocess, sys; print('[DAEMON] Iniciando BotSAC Worker Daemon...'); [time.sleep(300) or subprocess.run([sys.executable, 'backend/watchdog_service.py']) for _ in iter(int, 1)]"]
     depends_on:
       - backend
+      - ollama
+
+volumes:
+  ollama_models:
+    driver: local

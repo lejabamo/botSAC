@@ -8,10 +8,11 @@
 
 ## 1. RESUMEN EJECUTIVO Y ARQUITECTURA DE INFRAESTRUCTURA
 
-El sistema **BotSAC** opera bajo una topología distribuida de alta disponibilidad:
-1. **Servidor Principal (Oracle Linux):** Aloja el motor de base de datos institucional Oracle 19c/21c con la PDB `pdb_dev.educauca.gov.co` en la IP `172.16.0.10`.
-2. **Máquina Virtual de Aplicación (Debian 13 Trixie):** Aloja los contenedores de producción de BotSAC (Frontend Web Nginx, Backend API FastAPI y Agente Worker continuo de ingesta) orquestados mediante Docker Compose.
+El sistema **BotSAC** opera bajo una arquitectura distribuida, autónoma y autocontenida:
+1. **Servidor Principal (Oracle Linux):** Aloja el motor de base de datos institucional Oracle 19c/21c con la PDB `pdb_dev.educauca.gov.co` en la IP `172.16.0.10:1521`.
+2. **Máquina Virtual de Aplicación (Debian 13 Trixie):** Aloja los **4 contenedores Docker** del stack completo (Web Frontend Nginx, Backend API FastAPI, Worker Agente Continuo y **Motor de Inferencia de Inteligencia Artificial Ollama**).
 
+### Diagrama de Contenedores en la Máquina Virtual Debian 13:
 ```
                       [ RED CORPORATIVA / CLIENTES WEB ]
                                        │
@@ -24,13 +25,17 @@ El sistema **BotSAC** opera bajo una topología distribuida de alta disponibilid
 │  │   (React SPA + Nginx)     │ /api/*  │       (FastAPI + Uvicorn)       │  │
 │  │        Puerto 80          │         │           Puerto 8000           │  │
 │  └───────────────────────────┘         └─────────────────────────────────┘  │
-│                                                         │                   │
-│  ┌───────────────────────────┐                          │                   │
-│  │       botsac-worker       │                          │                   │
-│  │ (Daemon Ingesta/Watchdog) │ ─────────────────────────┘                   │
-│  └───────────────────────────┘                          │                   │
-│                                                         │                   │
-│  Volumen Persistente: /opt/botSAC/data                  │                   │
+│                                                  │             │            │
+│                                                  │             ▼            │
+│  ┌───────────────────────────┐                   │    ┌──────────────────┐  │
+│  │       botsac-worker       │ ──────────────────┘    │  botsac-ollama   │  │
+│  │ (Daemon Ingesta/Watchdog) │ ─────────────────────> │   (qwen2.5:3b)   │  │
+│  └───────────────────────────┘                        │   Puerto 11434   │  │
+│                                                       └──────────────────┘  │
+│                                                                │            │
+│  Volúmenes Persistentes:                                       │            │
+│  - /opt/botSAC/data (Documentos, análisis, logs, trazas)       ▼            │
+│  - ollama_models (Modelos de IA descargados persistentes) ─────┘            │
 └─────────────────────────────────────────────────────────┼───────────────────┘
                                                           │
                                                           ▼ (Puerto 1521 TCP)
@@ -44,11 +49,14 @@ El sistema **BotSAC** opera bajo una topología distribuida de alta disponibilid
                         └──────────────────────────────────────┘
 ```
 
+> **IMPORTANTE — AUTONOMÍA DEL SERVIDOR:**
+> El motor de Inteligencia Artificial (LLM) **NO se ejecuta en máquinas locales de desarrollo ni depende de la estación de trabajo**. Corre como un microservicio interno dockerizado (`botsac-ollama`) dentro de la propia Máquina Virtual en el servidor Debian 13. El backend y el worker se comunican con él a través de la red privada interna de Docker en `http://ollama:11434`.
+
 ---
 
 ## 2. PARÁMETROS Y DATOS DE CONFIGURACIÓN OFICIALES
 
-Estos son los valores oficiales e inviolables que deben configurarse en el archivo `.env` de la VM Debian 13:
+Estos son los valores oficiales e inviolables que deben configurarse en el archivo `/opt/botSAC/.env` de la VM Debian 13:
 
 ### 2.1 Conexión a Base de Datos Oracle Institucional (Servidor Oracle Linux)
 * **IP Servidor Oracle Linux:** `172.16.0.10`
@@ -73,10 +81,11 @@ Estos son los valores oficiales e inviolables que deben configurarse en el archi
    * **Contraseña:** `Bucheli_123`
    * **Rol:** Gestión de solicitudes asignadas.
 
-### 2.4 Motor de Inteligencia Artificial (LLM)
+### 2.4 Motor de Inteligencia Artificial (LLM Dockerizado en el Servidor)
 * **Proveedor:** `ollama`
-* **URL:** `http://localhost:11434` *(o IP del host Ollama si está en un servidor separado)*
-* **Modelo:** `qwen2.5:3b`
+* **URL de Red Interna Docker:** `http://ollama:11434`
+* **Modelo IA Seleccionado:** `qwen2.5:3b`
+* **Persistencia:** Volumen Docker `ollama_models` (no se pierde al reiniciar contenedores).
 
 ---
 
@@ -97,9 +106,6 @@ Como usuario `root` en el servidor Oracle Linux:
 # Permitir tráfico TCP en el puerto 1521 permanente
 sudo firewall-cmd --permanent --add-port=1521/tcp
 
-# Si se desea restringir exclusivamente a la IP de la VM Debian 13 (Ejemplo IP_DEBIAN=172.16.0.50):
-# sudo firewall-cmd --permanent --add-rich-rule='rule family="ipv4" source address="172.16.0.50" port port="1521" protocol="tcp" accept'
-
 # Recargar reglas activas
 sudo firewall-cmd --reload
 
@@ -114,7 +120,7 @@ sudo firewall-cmd --list-ports
 Siga estos pasos como administrador en la máquina virtual **Debian 13**:
 
 ### PASO 1: Acceso SSH y Preparación de Privilegios (`sudo`)
-En instalaciones limpias de Debian, a veces `sudo` no está instalado o el usuario no pertenece al grupo `sudo`. Si es necesario, ingrese como `root`:
+En instalaciones limpias de Debian, si `sudo` no está configurado, ingrese como `root`:
 ```bash
 su -
 apt update && apt install -y sudo curl git netcat-openbsd ca-certificates gnupg lsb-release htop ufw
@@ -129,9 +135,6 @@ ssh tu_usuario@<IP_DEBIAN_13>
 ---
 
 ### PASO 2: Instalar Docker y Docker Compose en Debian 13
-Debian 13 dispone de paquetes nativos totalmente optimizados, o puede emplear el repositorio oficial de Docker:
-
-#### Opción Recomendada (Instalador Oficial Docker Engine):
 ```bash
 # Descargar e instalar Docker
 curl -fsSL https://get.docker.com -o get-docker.sh
@@ -148,7 +151,7 @@ sudo systemctl enable --now docker
 docker --version
 docker compose version
 ```
-*(Nota: Cierre sesión y vuelva a ingresar por SSH para que el grupo `docker` tome efecto sin `sudo`).*
+*(Cierre sesión y vuelva a ingresar por SSH para que el grupo `docker` tome efecto sin `sudo`).*
 
 ---
 
@@ -163,7 +166,7 @@ cd /opt/botSAC
 ---
 
 ### PASO 4: Configurar el Archivo `.env` de Producción
-Cree el archivo de configuración con los datos oficiales de Oracle y SAC:
+Cree el archivo de configuración con los datos oficiales:
 ```bash
 cat << 'EOF' > /opt/botSAC/.env
 # ==============================================================================
@@ -180,9 +183,9 @@ SAC_URL=https://sac2.gestionsecretariasdeeducacion.gov.co/app_Login/
 # Credenciales de Usuarios BotSAC
 BOTSAC_PASS_LJBASTIDAS=SuperS4c
 
-# Motor LLM (Inteligencia Artificial)
+# Motor LLM (Dockerizado con Ollama en el Servidor Debian 13)
 LLM_PROVIDER=ollama
-LLM_BASE_URL=http://localhost:11434
+LLM_BASE_URL=http://ollama:11434
 LLM_MODEL=qwen2.5:3b
 
 # Base de Datos Oracle Institucional (Oracle Linux)
@@ -225,24 +228,20 @@ chmod +x deploy_vm.sh
 ./deploy_vm.sh
 ```
 
-O ejecute directamente los comandos de Docker Compose:
-```bash
-mkdir -p data/documents data/analysis data/logs data/locks
-chmod -R 775 data
-
-docker compose up -d --build
-```
+El script se encargará automáticamente de:
+1. Construir las imágenes de Backend y Frontend.
+2. Iniciar los 4 contenedores (`botsac-ollama`, `botsac-backend`, `botsac-frontend`, `botsac-worker`).
+3. Descargar e inicializar el modelo `qwen2.5:3b` dentro del contenedor `botsac-ollama`.
 
 ---
 
 ### PASO 7: Configuración del Firewall en Debian 13 (UFW)
-Proteja la máquina virtual permitiendo solo los puertos de servicio:
 ```bash
 sudo ufw default deny incoming
 sudo ufw default allow outgoing
 sudo ufw allow 22/tcp    # SSH
 sudo ufw allow 80/tcp    # Frontend Web BotSAC
-sudo ufw allow 8000/tcp  # API Backend (opcional si se consulta directamente)
+sudo ufw allow 8000/tcp  # API Backend
 sudo ufw enable
 ```
 
@@ -250,93 +249,94 @@ sudo ufw enable
 
 ## 5. VALIDACIÓN Y PRUEBAS DE ACEPTACIÓN (SMOKE TESTS)
 
-### 5.1 Estado de los Contenedores
+### 5.1 Estado de los 4 Contenedores
 ```bash
 docker compose ps
 ```
-Debe mostrar los 3 contenedores activos:
-* `botsac-frontend` — `Up` (Puerto `0.0.0.0:80->80/tcp`)
+Debe mostrar los 4 microservicios en estado `Up` / `healthy`:
+* `botsac-ollama` — `Up (healthy)` (Puerto `0.0.0.0:11434->11434/tcp`)
 * `botsac-backend` — `Up (healthy)` (Puerto `0.0.0.0:8000->8000/tcp`)
+* `botsac-frontend` — `Up` (Puerto `0.0.0.0:80->80/tcp`)
 * `botsac-worker` — `Up` (Daemon continuo de extracción y watchdog)
 
-### 5.2 Test de la API REST (Backend conectado a Oracle)
+### 5.2 Test del Motor de Inteligencia Artificial (Ollama en el Servidor)
+```bash
+# Verificar que el modelo qwen2.5:3b está cargado en el contenedor
+docker compose exec ollama ollama list
+
+# Test rápido de inferencia interna desde el servidor
+curl -s http://localhost:11434/api/generate -d '{
+  "model": "qwen2.5:3b",
+  "prompt": "Responde con la palabra OK si estás activo en el servidor de la Gobernación del Cauca.",
+  "stream": false
+}' | jq .response
+```
+
+### 5.3 Test de la API REST Backend (Conectada a Oracle Linux)
 ```bash
 curl -s http://localhost:8000/api/inbox | jq .
 ```
-Debe listar la estructura JSON de los radicados consultados directamente desde la base de datos Oracle en el servidor Oracle Linux.
+Debe listar los radicados obtenidos en vivo desde la base de datos Oracle institucional.
 
-### 5.3 Test del Frontend Web (Nginx)
+### 5.4 Test del Frontend Web (Nginx)
 ```bash
 curl -I http://localhost/
 ```
 Debe retornar `HTTP/1.1 200 OK`.
 
-### 5.4 Inspección de Logs en Vivo
-```bash
-# Ver logs del backend (conexiones Oracle y endpoints)
-docker compose logs -f --tail=50 backend
-
-# Ver logs del agente continuo (ciclos de extracción y conciliación)
-docker compose logs -f --tail=50 worker
-```
-
 ---
 
 ## 6. VALIDACIÓN FUNCIONAL EN EL NAVEGADOR
 
-Abra en su navegador de estación de trabajo institucional:
+Abra en su navegador dentro de la red corporativa:
 ```
 http://<IP_DEBIAN_13>/
 ```
 
-### Casos de Prueba Clave:
-1. **Acceso con `ljbastidas` / `SuperS4c`:**
-   - La bandeja debe mostrar en la parte superior los radicados en estado `✓ LISTO` (con documentos y análisis extraídos).
-   - Los radicados recién encolados aparecen al final con estado `📋 EN COLA SAC`.
-   - Botón `Aprobar y Archivar`: Solo habilitado para radicados listos.
-   - Pestaña `📁 Tramitados`: Muestra el historial de radicados aprobados.
-2. **Acceso con `djdelgado` / `Bucheli_123`:**
-   - Visualiza estrictamente los radicados asignados a su subdependencia.
-   - Se confirma el aislamiento multi-tenant y la imposibilidad de suplantación.
+### Casos de Validación:
+1. **Usuario `ljbastidas` / `SuperS4c`:**
+   - Visualiza en primer lugar los radicados procesados con IA en estado `✓ LISTO`.
+   - Botón `Aprobar y Archivar` habilitado únicamente para radicados listos.
+   - Pestaña `📁 Tramitados`: Histórico de radicados despachados.
+2. **Usuario `djdelgado` / `Bucheli_123`:**
+   - Visualiza únicamente sus radicados asignados (aislamiento multi-tenant estricto).
 
 ---
 
-## 7. MANTENIMIENTO Y OPERACIONES CONTINUAS EN DEBIAN 13
+## 7. MANTENIMIENTO Y OPERACIONES CONTINUAS EN EL SERVIDOR
 
-### Actualizar a una Nueva Versión (CI/CD Git)
+### Descargar Modelos Adicionales en Ollama
+```bash
+docker compose exec ollama ollama pull qwen2.5:7b
+```
+
+### Actualizar la Aplicación desde GitHub
 ```bash
 cd /opt/botSAC
 git pull origin main
 docker compose up -d --build
 ```
 
-### Reiniciar el Sistema
+### Ver Logs del LLM o del Worker en Tiempo Real
 ```bash
-cd /opt/botSAC
-docker compose restart
-```
+# Logs del motor de IA
+docker compose logs -f --tail=50 ollama
 
-### Monitoreo de Recursos en Tiempo Real
-```bash
-docker stats
-```
-
-### Respaldo de Documentos Locales y Trazas
-```bash
-tar -czvf /opt/backup_botsac_$(date +%Y%m%d_%H%M%S).tar.gz /opt/botSAC/data
+# Logs del agente extractor
+docker compose logs -f --tail=50 worker
 ```
 
 ---
 
-## 8. MATRIZ DE RESOLUCIÓN DE INCIDENCIAS (ORACLE LINUX + DEBIAN 13)
+## 8. MATRIZ DE RESOLUCIÓN DE INCIDENCIAS
 
 | Incidencia | Origen Técnico | Solución Específica |
 | :--- | :--- | :--- |
-| `ORA-12170: TNS:Connect timeout` | `firewalld` en Oracle Linux bloquea el puerto 1521. | En el servidor Oracle Linux ejecutar: `sudo firewall-cmd --permanent --add-port=1521/tcp && sudo firewall-cmd --reload`. |
-| `nc -zv 172.16.0.10 1521` reporta *Connection refused* | El listener de Oracle está caído o no escucha en la IP de red. | En Oracle Linux ejecutar `lsnrctl status` y verificar `listener.ora` para que escuche en `0.0.0.0` o `172.16.0.10`. |
-| Error `libaio1` o `libaio1t64` al compilar imagen | Transición de 64-bit time_t en Debian 13. | Resuelto en el `Dockerfile` de BotSAC (`apt-get install libaio1 || apt-get install libaio1t64`). |
-| `ORA-01017: invalid username/password` | Credenciales discrepantes en `.env`. | Comprobar que en `/opt/botSAC/.env` figure `ORACLE_USER=BOTSAC` y `ORACLE_PASS=SedCauca**`. |
-| Frontend inaccesible desde otra máquina | Puerto 80 bloqueado en Debian 13. | Ejecutar en Debian 13: `sudo ufw allow 80/tcp`. |
+| `ORA-12170: TNS:Connect timeout` | `firewalld` en Oracle Linux bloquea el puerto 1521. | En el servidor Oracle Linux: `sudo firewall-cmd --permanent --add-port=1521/tcp && sudo firewall-cmd --reload`. |
+| `Connection refused: http://ollama:11434` | El contenedor de Ollama no ha terminado de arrancar. | Verificar con `docker compose ps` y `docker compose logs ollama`. |
+| El modelo `qwen2.5:3b` no responde | No se completó la descarga del modelo. | Ejecutar: `docker compose exec ollama ollama pull qwen2.5:3b`. |
+| Error `libaio1t64` al construir backend | Transición 64-bit time_t en Debian 13. | Resuelto en Dockerfile (`apt-get install libaio1 || apt-get install libaio1t64`). |
+| `ORA-01017: invalid username/password` | Credenciales discrepantes en `.env`. | Verificar `ORACLE_USER=BOTSAC` y `ORACLE_PASS=SedCauca**` en `/opt/botSAC/.env`. |
 
 ---
 *Documento de Ingeniería — Gobernación del Cauca | BotSAC Enterprise.*
